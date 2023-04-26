@@ -40,3 +40,6 @@ lib*.pc
 /Debug/
 /Release/
 /tmp_install/
+
+# excludes compile files
+.ccls-cache/
