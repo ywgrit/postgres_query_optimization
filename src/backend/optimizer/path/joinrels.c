@@ -43,7 +43,7 @@ static void populate_joinrel_with_paths(PlannerInfo *root, RelOptInfo *rel1,
  *	  jointree items.  (This is one step of the dynamic-programming method
  *	  embodied in standard_join_search.)  Join rel nodes for each feasible
  *	  combination of lower-level rels are created and returned in a list.
- *	  Implementation paths are created for each such joinrel, too.
+ *	  Implementation paths(two jointree items can be joined according to different implementation paths) are created for each such joinrel, too.
  *
  * level: level of rels we want to make this time
  * root->join_rel_level[j], 1 <= j < level, is a list of rels containing j items
@@ -63,7 +63,7 @@ join_search_one_level(PlannerInfo *root, int level)
 	root->join_cur_level = level;
 
 	/*
-	 * First, consider left-sided and right-sided plans, in which rels of
+	 * First, consider left-sided and right-sided plans(in populate_joinrel_with_paths routine, two jointree items will be joined in both direction), in which rels of
 	 * exactly level-1 member relations are joined against initial relations.
 	 * We prefer to join using join clauses, but if we find a rel of level-1
 	 * members that has no join clauses, we will generate Cartesian-product
@@ -73,7 +73,7 @@ join_search_one_level(PlannerInfo *root, int level)
 	{
 		RelOptInfo *old_rel = (RelOptInfo *) lfirst(r);
 
-		if (old_rel->joininfo != NIL || old_rel->has_eclass_joins ||
+		if (old_rel->joininfo != NIL || old_rel->has_eclass_joins/* this RelOptInfo maybe exist equal join condition with other RelOptInfos in EquivalenceClass */ ||
 			has_join_restriction(root, old_rel))
 		{
 			/*
@@ -126,7 +126,7 @@ join_search_one_level(PlannerInfo *root, int level)
 	 *
 	 * We only consider bushy-plan joins for pairs of rels where there is a
 	 * suitable join clause (or join order restriction), in order to avoid
-	 * unreasonable growth of planning time.
+	 * unreasonable growth of planning time. Not like left-sided and right-sided plans, in which two jointree items which are no restriction on join order and no joincluases, are also joined.
 	 */
 	for (k = 2;; k++)
 	{
@@ -136,7 +136,7 @@ join_search_one_level(PlannerInfo *root, int level)
 		 * Since make_join_rel(x, y) handles both x,y and y,x cases, we only
 		 * need to go as far as the halfway point.
 		 */
-		if (k > other_level)
+		if (k > other_level) /* loop exit condition is not set in for statement */
 			break;
 
 		foreach(r, joinrels[k])
@@ -159,7 +159,7 @@ join_search_one_level(PlannerInfo *root, int level)
 			else
 				other_rels = list_head(joinrels[other_level]);
 
-			for_each_cell(r2, other_rels)
+			for_each_cell(r2, other_rels) /* the code snippet between line 162 and line 179 works the same way as make_rels_by_clause_joins. */
 			{
 				RelOptInfo *new_rel = (RelOptInfo *) lfirst(r2);
 
@@ -937,7 +937,7 @@ have_join_order_restriction(PlannerInfo *root,
 	 * of probably-useless joins to be considered, but failing to do this can
 	 * cause us to fail to construct a plan at all.)
 	 */
-	foreach(l, root->placeholder_list)
+	foreach(l, root->placeholder_list) /* TODO(wx): I don't understand */
 	{
 		PlaceHolderInfo *phinfo = (PlaceHolderInfo *) lfirst(l);
 
@@ -1004,7 +1004,7 @@ have_join_order_restriction(PlannerInfo *root,
 	 * that when there is a join order restriction high up in the join tree
 	 * (that is, with many rels inside the LHS or RHS), we would otherwise
 	 * expend lots of effort considering very stupid join combinations within
-	 * its LHS or RHS.
+	 * its LHS or RHS. TODO(wx): I can not understand this comment.
 	 */
 	if (result)
 	{
@@ -1041,7 +1041,7 @@ has_join_restriction(PlannerInfo *root, RelOptInfo *rel)
 		PlaceHolderInfo *phinfo = (PlaceHolderInfo *) lfirst(l);
 
 		if (bms_is_subset(rel->relids, phinfo->ph_eval_at) &&
-			!bms_equal(rel->relids, phinfo->ph_eval_at))
+			!bms_equal(rel->relids, phinfo->ph_eval_at)) /* rel is located to lower level of join */
 			return true;
 	}
 
@@ -1053,12 +1053,12 @@ has_join_restriction(PlannerInfo *root, RelOptInfo *rel)
 		if (sjinfo->jointype == JOIN_FULL)
 			continue;
 
-		/* ignore if SJ is already contained in rel */
+		/* ignore if SJ is already contained in rel. Example: A leftjoin {B leftjoin C}, if rel represent the joinrel of {B leftjoin C}, sjinfo represent the leftjoin of B and C, then skip sjinfo. */
 		if (bms_is_subset(sjinfo->min_lefthand, rel->relids) &&
 			bms_is_subset(sjinfo->min_righthand, rel->relids))
 			continue;
 
-		/* restricted if it overlaps LHS or RHS, but doesn't contain SJ */
+		/* restricted if it overlaps LHS or RHS, but doesn't contain SJ. Because min_lefthand and min_righthand control join order, if rel intersects with one of them, rel may be involved in limiting join order. This is just a rough estimation, need estimate accurately later. */
 		if (bms_overlap(sjinfo->min_lefthand, rel->relids) ||
 			bms_overlap(sjinfo->min_righthand, rel->relids))
 			return true;

@@ -43,7 +43,7 @@ typedef struct pullup_replace_vars_context
 	List	   *targetlist;		/* tlist of subquery being pulled up */
 	RangeTblEntry *target_rte;	/* RTE of subquery */
 	Relids		relids;			/* relids within subquery, as numbered after
-								 * pullup (set only if target_rte->lateral) */
+								 * pullup (set only if target_rte->lateral). If a var references outer query's attribute, it won't be add to relids. */
 	bool	   *outer_hasSubLinks;	/* -> outer query's hasSubLinks */
 	int			varno;			/* varno of subquery */
 	bool		need_phvs;		/* do we need PlaceHolderVars? */
@@ -213,7 +213,7 @@ pull_up_sublinks_jointree_recurse(PlannerInfo *root, Node *jtnode,
 		newf = makeFromExpr(newfromlist, NULL);
 		/* Set up a link representing the rebuilt jointree */
 		jtlink = (Node *) newf;
-		/* Now process qual --- all children are available for use */
+		/* Now process qual --- all children are available for use, jtlink will be changed(include jtlink->quals) in pull_up_sublinks_qual_recurse */
 		newf->quals = pull_up_sublinks_qual_recurse(root, f->quals,
 													&jtlink, frelids,
 													NULL, NULL);
@@ -346,7 +346,7 @@ pull_up_sublinks_qual_recurse(PlannerInfo *root, Node *node,
 			if ((j = convert_ANY_sublink_to_join(root, sublink,
 												 available_rels1)) != NULL)
 			{
-				/* Yes; insert the new join node into the join tree */
+				/* Yes; insert the new join node into the join tree. Note:these code are shared with 404 lines, which means there is just one piece of code */
 				j->larg = *jtlink1;
 				*jtlink1 = (Node *) j;
 				/* Recursively process pulled-up jointree nodes */
@@ -398,12 +398,12 @@ pull_up_sublinks_qual_recurse(PlannerInfo *root, Node *node,
 		else if (sublink->subLinkType == EXISTS_SUBLINK)
 		{
 			if ((j = convert_EXISTS_sublink_to_join(root, sublink, false,
-													available_rels1)) != NULL)
+													available_rels1)) != NULL) // the j->rarg maybe set
 			{
 				/* Yes; insert the new join node into the join tree */
 				j->larg = *jtlink1;
 				*jtlink1 = (Node *) j;
-				/* Recursively process pulled-up jointree nodes */
+				/* Recursively process pulled-up jointree nodes(sublink, i.e j->rarg) */
 				j->rarg = pull_up_sublinks_jointree_recurse(root,
 															j->rarg,
 															&child_rels);
@@ -1420,7 +1420,7 @@ is_simple_subquery(Query *subquery, RangeTblEntry *rte,
 	 * ALL, which is handled by a different code path). Maybe after querytree
 	 * redesign...
 	 */
-	if (subquery->setOperations)
+	if (subquery->setOperations) // if subquery->setOperations not NULL, then subquery should be handled by pull_up_simple_union_all function
 		return false;
 
 	/*
@@ -2133,7 +2133,7 @@ pullup_replace_vars_callback(Var *var,
 		newnode = (Node *) copyObject(tle->expr);
 
 		/* Insert PlaceHolderVar if needed */
-		if (rcon->need_phvs)
+		if (rcon->need_phvs) /* need_phvs is just a rough judgment */
 		{
 			bool		wrap;
 
@@ -2148,7 +2148,7 @@ pullup_replace_vars_callback(Var *var,
 				 * it doesn't seem worth the trouble to check that.)
 				 */
 				if (rcon->target_rte->lateral &&
-					!bms_is_member(((Var *) newnode)->varno, rcon->relids))
+					!bms_is_member(((Var *) newnode)->varno, rcon->relids)/* newnode(Var) references outeride the subquery */)
 					wrap = true;
 				else
 					wrap = false;
@@ -2185,9 +2185,9 @@ pullup_replace_vars_callback(Var *var,
 				 * level-zero var must belong to the subquery.
 				 */
 				if ((rcon->target_rte->lateral ?
-					 bms_overlap(pull_varnos((Node *) newnode), rcon->relids) :
+					 bms_overlap(pull_varnos((Node *) newnode), rcon->relids)/* if overlap, then newnode references no var outside the subquery, then no wrap needed */ :
 					 contain_vars_of_level((Node *) newnode, 0)) &&
-					!contain_nonstrict_functions((Node *) newnode))
+					!contain_nonstrict_functions((Node *) newnode)) /* if subquery is lateral and newnode(expression) references var outside the subquery, or (subquery is not lateral and references var in current level and newnode is not strict), then we need wrap */
 				{
 					/* No wrap needed */
 					wrap = false;
@@ -2562,7 +2562,7 @@ reduce_outer_joins_pass2(Node *jtnode,
 		List	   *pass_forced_null_vars;
 
 		/* Scan quals to see if we can add any constraints */
-		pass_nonnullable_rels = find_nonnullable_rels(f->quals);
+		pass_nonnullable_rels = find_nonnullable_rels(f->quals); // It means the columns of a row of the relation can't be all null.
 		pass_nonnullable_rels = bms_add_members(pass_nonnullable_rels,
 												nonnullable_rels);
 		/* NB: we rely on list_concat to not damage its second argument */
@@ -2585,7 +2585,7 @@ reduce_outer_joins_pass2(Node *jtnode,
 										 pass_forced_null_vars);
 		}
 		bms_free(pass_nonnullable_rels);
-		/* can't so easily clean up var lists, unfortunately */
+		/* can't so easily clean up var lists, unfortunately. TODO(wx):It is worth to delve into. */
 	}
 	else if (IsA(jtnode, JoinExpr))
 	{
@@ -2684,7 +2684,7 @@ reduce_outer_joins_pass2(Node *jtnode,
 										forced_null_vars);
 			if (overlap != NIL &&
 				bms_overlap(pull_varnos((Node *) overlap),
-							right_state->relids))
+							right_state->relids)) // should be statisfied the three condition in page 86 of zhangshujie-postgres-book
 				jointype = JOIN_ANTI;
 		}
 
@@ -2699,7 +2699,7 @@ reduce_outer_joins_pass2(Node *jtnode,
 		}
 		j->jointype = jointype;
 
-		/* Only recurse if there's more to do below here */
+		/* Only recurse if there's more to do below here. The current joinexpr has been dealed(current joinexpr can't be right-join), now delve into it's child. The following code's logic is explained succinctly in page 89 of zhangshujie-postgres-book. */
 		if (left_state->contains_outer || right_state->contains_outer)
 		{
 			Relids		local_nonnullable_rels;

@@ -932,7 +932,7 @@ add_partial_path_precheck(RelOptInfo *parent_rel, Cost total_cost,
 /*
  * create_seqscan_path
  *	  Creates a path corresponding to a sequential scan, returning the
- *	  pathnode.
+ *	  pathnode. required_outer means other rels which are required, if required_outer is not NULL, create a parameterized Path.
  */
 Path *
 create_seqscan_path(PlannerInfo *root, RelOptInfo *rel,
@@ -1033,7 +1033,7 @@ create_index_path(PlannerInfo *root,
 	pathnode->path.parallel_workers = 0;
 	pathnode->path.pathkeys = pathkeys;
 
-	/* Convert clauses to indexquals the executor can handle */
+	/* Convert clauses to indexquals the executor can handle. See detail in zhangshujie's postgres book in page 274. */
 	expand_indexqual_conditions(index, indexclauses, indexclausecols,
 								&indexquals, &indexqualcols);
 

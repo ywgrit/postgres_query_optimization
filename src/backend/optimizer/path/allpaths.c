@@ -2288,7 +2288,7 @@ make_rel_from_joinlist(PlannerInfo *root, List *joinlist)
 	 * dynamic-programming algorithm we must employ to consider all ways of
 	 * joining the child nodes.
 	 */
-	levels_needed = list_length(joinlist);
+	levels_needed = list_length(joinlist); /* number of iterations in dynamic-programming */
 
 	if (levels_needed <= 0)
 		return NULL;			/* nothing to do? */
@@ -2298,7 +2298,7 @@ make_rel_from_joinlist(PlannerInfo *root, List *joinlist)
 	 * This may contain both base rels and rels constructed according to
 	 * sub-joinlists.
 	 */
-	initial_rels = NIL;
+	initial_rels = NIL; /* This list contain optimal scan path of all baserel in query tree. */
 	foreach(jl, joinlist)
 	{
 		Node	   *jlnode = (Node *) lfirst(jl);
@@ -2348,7 +2348,7 @@ make_rel_from_joinlist(PlannerInfo *root, List *joinlist)
 		else if (enable_geqo && levels_needed >= geqo_threshold)
 			return geqo(root, levels_needed, initial_rels);
 		else
-			return standard_join_search(root, levels_needed, initial_rels);
+			return standard_join_search(root, levels_needed, initial_rels); /* dynamic programming */
 	}
 }
 
@@ -2358,7 +2358,7 @@ make_rel_from_joinlist(PlannerInfo *root, List *joinlist)
  *	  to join component relations into join relations.
  *
  * 'levels_needed' is the number of iterations needed, ie, the number of
- *		independent jointree items in the query.  This is > 1.
+ *		independent jointree items(baserel) in the query.  This is > 1.
  *
  * 'initial_rels' is a list of RelOptInfo nodes for each independent
  *		jointree item.  These are the components to be joined together.
@@ -2402,9 +2402,9 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 	 *
 	 * root->join_rel_level[j] is a list of all the j-item rels.  Initially we
 	 * set root->join_rel_level[1] to represent all the single-jointree-item
-	 * relations.
+	 * relations(ie, the initial_rels).
 	 */
-	root->join_rel_level = (List **) palloc0((levels_needed + 1) * sizeof(List *));
+	root->join_rel_level = (List **) palloc0((levels_needed + 1) * sizeof(List *)); /* the +1 is for ease of use */
 
 	root->join_rel_level[1] = initial_rels;
 
@@ -2433,7 +2433,7 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 			/* Create GatherPaths for any useful partial paths for rel */
 			generate_gather_paths(root, rel);
 
-			/* Find and save the cheapest paths for this rel */
+			/* Find and save the cheapest paths for this rel.  */
 			set_cheapest(rel);
 
 #ifdef OPTIMIZER_DEBUG

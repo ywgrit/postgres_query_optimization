@@ -455,9 +455,9 @@ join_clause_is_movable_to(RestrictInfo *rinfo, RelOptInfo *baserel)
 
 /*
  * join_clause_is_movable_into
- *		Test whether a join clause is movable and can be evaluated within
+ *		Test whether a join clause(join or where condition) is movable and can be evaluated within
  *		the current join context.
- *
+ * This routine is much different from join_clause_is_movable_to, see detail in zhangshujie's postgres book in page 273
  * currentrelids: the relids of the proposed evaluation location
  * current_and_outer: the union of currentrelids and the required_outer
  *		relids (parameterization's outer relations)
@@ -465,7 +465,7 @@ join_clause_is_movable_to(RestrictInfo *rinfo, RelOptInfo *baserel)
  * The API would be a bit clearer if we passed the current relids and the
  * outer relids separately and did bms_union internally; but since most
  * callers need to apply this function to multiple clauses, we make the
- * caller perform the union.
+ * caller perform the union(performance is considered so carefully).
  *
  * Obviously, the clause must only refer to Vars available from the current
  * relation plus the outer rels.  We also check that it does reference at

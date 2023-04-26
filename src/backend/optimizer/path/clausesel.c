@@ -271,7 +271,7 @@ clauselist_selectivity(PlannerInfo *root,
 			{
 				s2 = rqlist->hibound + rqlist->lobound - 1.0;
 
-				/* Adjust for double-exclusion of NULLs */
+				/* Adjust for double-exclusion of NULLs. P(A > x) = 1- P(A <= x) - P(NULL), P(A < y) = 1 - P(A >= y) - P(NULL), so P(NULL) has been excluded double time. */
 				s2 += nulltestsel(root, IS_NULL, rqlist->var,
 								  varRelid, jointype, sjinfo);
 

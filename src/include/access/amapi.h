@@ -154,7 +154,7 @@ typedef void (*amparallelrescan_function) (IndexScanDesc scan);
 
 /*
  * API struct for an index AM.  Note this must be stored in a single palloc'd
- * chunk of memory.
+ * chunk of memory. Each kind of Index has its own IndexAmRoutine, which needs to set attribute and access method according to its characteristic.
  */
 typedef struct IndexAmRoutine
 {
@@ -165,7 +165,7 @@ typedef struct IndexAmRoutine
 	 * this AM.  Zero if AM does not have a fixed set of strategy assignments.
 	 */
 	uint16		amstrategies;
-	/* total number of support functions that this AM uses */
+	/* total number of support functions that this AM uses. total number of support sort interfaces */
 	uint16		amsupport;
 	/* does AM support ORDER BY indexed column's value? */
 	bool		amcanorder;

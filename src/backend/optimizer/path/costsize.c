@@ -111,7 +111,7 @@ double		parallel_setup_cost = DEFAULT_PARALLEL_SETUP_COST;
 
 int			effective_cache_size = DEFAULT_EFFECTIVE_CACHE_SIZE;
 
-Cost		disable_cost = 1.0e10;
+Cost		disable_cost = 1.0e10; /* This value will be added to the cost of Path if related GUC is set off, so the Path with related GUC will failed when compared to other Paths. */
 
 int			max_parallel_workers_per_gather = 2;
 
@@ -217,7 +217,7 @@ cost_seqscan(Path *path, PlannerInfo *root,
 	if (!enable_seqscan)
 		startup_cost += disable_cost;
 
-	/* fetch estimated page cost for tablespace containing table */
+	/* fetch estimated page cost for tablespace containing table. per-page cost in different tablespace maybe different, so if tablespace has specified page cost, then use it to estimate page cost. */
 	get_tablespace_page_costs(baserel->reltablespace,
 							  NULL,
 							  &spc_seq_page_cost);
@@ -232,10 +232,10 @@ cost_seqscan(Path *path, PlannerInfo *root,
 
 	startup_cost += qpqual_cost.startup;
 	cpu_per_tuple = cpu_tuple_cost + qpqual_cost.per_tuple;
-	cpu_run_cost = cpu_per_tuple * baserel->tuples;
+	cpu_run_cost = cpu_per_tuple * baserel->tuples; /* Note: here is baserel->tuples rather than baserel->rows because seqscan will scan all tuples, all tuples will be applied with quals. */
 	/* tlist eval costs are paid per output row, not per tuple scanned */
 	startup_cost += path->pathtarget->cost.startup;
-	cpu_run_cost += path->pathtarget->cost.per_tuple * path->rows;
+	cpu_run_cost += path->pathtarget->cost.per_tuple * path->rows; /* Note: here is path->rows rather than baserel->tuples because only project tuples which satisfy quals. */
 
 	/* Adjust costing for parallelism, if used. */
 	if (path->parallel_workers > 0)
@@ -523,8 +523,8 @@ cost_index(IndexPath *path, PlannerInfo *root, double loop_count,
 
 	/*
 	 * Call index-access-method-specific code to estimate the processing cost
-	 * for scanning the index, as well as the selectivity of the index (ie,
-	 * the fraction of main-table tuples we will have to retrieve) and its
+	 * for scanning the index(not include the cost of retrieving main-table), as well as the selectivity of the index (ie,
+	 * the fraction of main-table(table which stores tuples) tuples we will have to retrieve) and its
 	 * correlation to the main-table tuple order.  We need a cast here because
 	 * relation.h uses a weak function type to avoid including amapi.h.
 	 */
@@ -623,7 +623,7 @@ cost_index(IndexPath *path, PlannerInfo *root, double loop_count,
 		if (indexonly)
 			pages_fetched = ceil(pages_fetched * (1.0 - baserel->allvisfrac));
 
-		min_IO_cost = (pages_fetched * spc_random_page_cost) / loop_count;
+		min_IO_cost = (pages_fetched * spc_random_page_cost) / loop_count; /* use random rather than sequential cost because the cache effects has been considered in index_pages_fetched routine. */
 	}
 	else
 	{
@@ -654,7 +654,7 @@ cost_index(IndexPath *path, PlannerInfo *root, double loop_count,
 		{
 			min_IO_cost = spc_random_page_cost;
 			if (pages_fetched > 1)
-				min_IO_cost += (pages_fetched - 1) * spc_seq_page_cost;
+				min_IO_cost += (pages_fetched - 1) * spc_seq_page_cost; /* It is sequential rather than random cost used here. */
 		}
 		else
 			min_IO_cost = 0;
@@ -4033,7 +4033,7 @@ set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel)
 /*
  * get_parameterized_baserel_size
  *		Make a size estimate for a parameterized scan of a base relation.
- *
+ *      TODO(wx): use double type to get larger space to store the number of tuples?
  * 'param_clauses' lists the additional join clauses to be used.
  *
  * set_baserel_size_estimates must have been applied already.

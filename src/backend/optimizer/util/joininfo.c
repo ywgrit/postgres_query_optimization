@@ -30,7 +30,7 @@
  * If a is much larger than the other tables, it may be worthwhile to
  * cross-join b and c and then use an inner indexscan on a.x.  Therefore
  * we should consider this joinclause as reason to join b to c, even though
- * it can't be applied at that join step.
+ * it can't be applied at that join step. Originally there was no joinclause between b and c, but in this case the above joinclause can be seen as relevant joinclause between b and c.
  */
 bool
 have_relevant_joinclause(PlannerInfo *root,
@@ -62,7 +62,7 @@ have_relevant_joinclause(PlannerInfo *root,
 
 		if (bms_overlap(other_relids, rinfo->required_relids))
 		{
-			result = true;
+			result = true; /* TODO(wx): why don't just return true? */
 			break;
 		}
 	}

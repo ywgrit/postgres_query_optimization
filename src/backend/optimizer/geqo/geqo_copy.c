@@ -39,7 +39,7 @@
 /* geqo_copy
  *
  *	 copies one gene to another
- *
+ *   TODO(wx): why pass PlannerInfo?
  */
 void
 geqo_copy(PlannerInfo *root, Chromosome *chromo1, Chromosome *chromo2,

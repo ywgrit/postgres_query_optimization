@@ -965,7 +965,7 @@ typedef struct RangeTblEntry
 	 * Fields valid for a subquery RTE (else NULL):
 	 */
 	Query	   *subquery;		/* the sub-query */
-	bool		security_barrier;	/* is from security_barrier view? */
+	bool		security_barrier;	/* is from security_barrier view? about security_barrier: https://www.2ndquadrant.com/en/blog/how-do-postgresql-security_barrier-views-work/ */
 
 	/*
 	 * Fields valid for a join RTE (else NULL/zero):

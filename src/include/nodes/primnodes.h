@@ -498,7 +498,7 @@ typedef struct OpExpr
 	Oid			opresulttype;	/* PG_TYPE OID of result value */
 	bool		opretset;		/* true if operator returns set */
 	Oid			opcollid;		/* OID of collation of result */
-	Oid			inputcollid;	/* OID of collation that operator should use */
+	Oid			inputcollid;	/* OID of collation that operator should use(for example will be used in ORDER BY) */
 	List	   *args;			/* arguments to the operator (1 or 2) */
 	int			location;		/* token location, or -1 if unknown */
 } OpExpr;
@@ -610,7 +610,7 @@ typedef struct BoolExpr
  * other SubLinks.  This number identifies different multiple-assignment
  * subqueries within an UPDATE statement's SET list.  It is unique only
  * within a particular targetlist.  The output column(s) of the MULTIEXPR
- * are referenced by PARAM_MULTIEXPR Params appearing elsewhere in the tlist.
+ * are referenced by PARAM_MULTIEXPR Params appearing elsewhere in the tlist(targetlist).
  *
  * The CTE_SUBLINK case never occurs in actual SubLink nodes, but it is used
  * in SubPlans generated for WITH subqueries.
@@ -632,10 +632,10 @@ typedef struct SubLink
 {
 	Expr		xpr;
 	SubLinkType subLinkType;	/* see above */
-	int			subLinkId;		/* ID (1..n); 0 if not MULTIEXPR */
+	int			subLinkId;		/* ID (1..n); 0 if not MULTIEXPR. If statement includes multiple sublinks, it means the id of currently sublink in statement */
 	Node	   *testexpr;		/* outer-query test for ALL/ANY/ROWCOMPARE */
 	List	   *operName;		/* originally specified operator name */
-	Node	   *subselect;		/* subselect as Query* or raw parsetree */
+	Node	   *subselect;		/* subselect as Query* or raw parsetree, this is the query of subcaluse of sublink. For example, SELECT sname From STUDENT WHERE sno > ANY(SELECT sno FROM SCORE): the sublink is "sno > ANY(SELECT sno FROM SCORE)", and the subclause of sublink is "SELECT sno FROM SCORE" */
 	int			location;		/* token location, or -1 if unknown */
 } SubLink;
 
@@ -1469,7 +1469,7 @@ typedef struct FromExpr
 {
 	NodeTag		type;
 	List	   *fromlist;		/* List of join subtrees */
-	Node	   *quals;			/* qualifiers on join, if any */
+	Node	   *quals;			/* qualifiers on join, if any. This is maybe SubLink */
 } FromExpr;
 
 /*----------

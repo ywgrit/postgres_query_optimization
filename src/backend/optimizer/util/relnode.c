@@ -106,7 +106,7 @@ build_simple_rel(PlannerInfo *root, int relid, RelOptInfo *parent)
 	rel->reloptkind = parent ? RELOPT_OTHER_MEMBER_REL : RELOPT_BASEREL;
 	rel->relids = bms_make_singleton(relid);
 	rel->rows = 0;
-	/* cheap startup cost is interesting iff not all tuples to be retrieved */
+	/* cheap startup cost is interesting iff not all tuples to be retrieved(ie. limit is used) */
 	rel->consider_startup = (root->tuple_fraction > 0);
 	rel->consider_param_startup = false;	/* might get changed later */
 	rel->consider_parallel = false; /* might get changed later */
@@ -1047,7 +1047,7 @@ get_baserel_parampathinfo(PlannerInfo *root, RelOptInfo *baserel,
 
 	Assert(!bms_overlap(baserel->relids, required_outer));
 
-	/* If we already have a PPI for this parameterization, just return it */
+	/* If we already have a PPI for this parameterization, just return it. A RelOptInfo may have Paths with different parameterization(of course these Paths have different outer_relids), Paths with same parameterization share a ParamPathInfo, it can avoid recalculations(see details in definition of ParamPathInfo) */
 	foreach(lc, baserel->ppilist)
 	{
 		ppi = (ParamPathInfo *) lfirst(lc);
@@ -1057,7 +1057,7 @@ get_baserel_parampathinfo(PlannerInfo *root, RelOptInfo *baserel,
 
 	/*
 	 * Identify all joinclauses that are movable to this base rel given this
-	 * parameterization.
+	 * parameterization. ie. clauses push down
 	 */
 	joinrelids = bms_union(baserel->relids, required_outer);
 	pclauses = NIL;

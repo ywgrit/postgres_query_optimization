@@ -355,7 +355,7 @@ pull_ors(List *orlist)
 		 * Note: we can destructively concat the subexpression's arglist
 		 * because we know the recursive invocation of pull_ors will have
 		 * built a new arglist not shared with any other expr. Otherwise we'd
-		 * need a list_copy here.
+		 * need a list_copy here. That is becauselist_concat and lappend will copy the item od orlist.
 		 */
 		if (or_clause(subexpr))
 			out_list = list_concat(out_list,
@@ -595,7 +595,7 @@ process_duplicate_ors(List *orlist)
 	 * Note that because we use list_difference, any multiple occurrences of a
 	 * winning clause in an AND sub-clause will be removed automatically.
 	 */
-	neworlist = NIL;
+	neworlist = NIL; // It's definition is in the top of the function, but not assign it util use it.
 	foreach(temp, orlist)
 	{
 		Expr	   *clause = (Expr *) lfirst(temp);

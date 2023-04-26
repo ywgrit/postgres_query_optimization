@@ -170,7 +170,7 @@ typedef struct PlannerInfo
 	Bitmapset  *outer_params;
 
 	/*
-	 * simple_rel_array holds pointers to "base rels" and "other rels" (see
+	 * simple_rel_array holds pointers to "base rels" and "other rels" (not includes "join rels" which are stored at join_rel_list, see
 	 * comments for RelOptInfo for more info).  It is indexed by rangetable
 	 * index (so entry 0 is always wasted).  Entries can be NULL when an RTE
 	 * does not correspond to a base relation, such as a join RTE or an
@@ -238,11 +238,11 @@ typedef struct PlannerInfo
 
 	List	   *left_join_clauses;	/* list of RestrictInfos for mergejoinable
 									 * outer join clauses w/nonnullable var on
-									 * left */
+									 * left(left side) i.e. nonnullable.var1 op nullable.var2 */
 
 	List	   *right_join_clauses; /* list of RestrictInfos for mergejoinable
 									 * outer join clauses w/nonnullable var on
-									 * right */
+									 * right(right side) i.e. nullable.var2 = nonnullable.var1 */
 
 	List	   *full_join_clauses;	/* list of RestrictInfos for mergejoinable
 									 * full join clauses */
@@ -259,7 +259,7 @@ typedef struct PlannerInfo
 
 	List	   *fkey_list;		/* list of ForeignKeyOptInfos */
 
-	List	   *query_pathkeys; /* desired pathkeys for query_planner() */
+	List	   *query_pathkeys; /* desired pathkeys for query_planner()(SPJ). It is hints come from upper Non-SPJ planner. In query_planner(), expect to meet this requirement which can be beneficial to upper Non-SPJ planner */
 
 	List	   *group_pathkeys; /* groupClause pathkeys, if any */
 	List	   *window_pathkeys;	/* pathkeys of bottom window, if any */
@@ -422,7 +422,7 @@ typedef struct PlannerInfo
  *					(always NIL if it's not a table)
  *		pages - number of disk pages in relation (zero if not a table)
  *		tuples - number of tuples in relation (not considering restrictions)
- *		allvisfrac - fraction of disk pages that are marked all-visible
+ *		allvisfrac - fraction of disk pages that are marked all-visible. Designed for fast index scans, it is used to estimate which pages the index scan will visit.
  *		subroot - PlannerInfo for subquery (NULL if it's not a subquery)
  *		subplan_params - list of PlannerParamItems to be passed to subquery
  *
@@ -528,7 +528,7 @@ typedef struct RelOptInfo
 	double		rows;			/* estimated number of result tuples */
 
 	/* per-relation planner control flags */
-	bool		consider_startup;	/* keep cheap-startup-cost paths? */
+	bool		consider_startup;	/* keep cheap-startup-cost paths? consider_startup and consider_param_startup are used when precheck phsical path's cost, it means to precheck startup_ cost or not. */
 	bool		consider_param_startup; /* ditto, for parameterized paths? */
 	bool		consider_parallel;	/* consider parallel paths? */
 
@@ -536,8 +536,8 @@ typedef struct RelOptInfo
 	struct PathTarget *reltarget;	/* list of Vars/Exprs, cost, width */
 
 	/* materialization information */
-	List	   *pathlist;		/* Path structures */
-	List	   *ppilist;		/* ParamPathInfos used in pathlist */
+	List	   *pathlist;		/* Path structures. All access paths to this relation */
+	List	   *ppilist;		/* ParamPathInfos used in pathlist. Each rel may have multiple parameterized Paths, each parameterized Path has a ParamPathInfo, parameterized Paths with same parameterized information(outer_relids) share one ParamPathInfo. */
 	List	   *partial_pathlist;	/* partial Paths */
 	struct Path *cheapest_startup_path;
 	struct Path *cheapest_total_path;
@@ -550,21 +550,21 @@ typedef struct RelOptInfo
 	Relids		lateral_relids; /* minimum parameterization of rel */
 
 	/* information about a base rel (not set for join rels!) */
-	Index		relid;
+	Index		relid;          /* the rtindex of corresponding RangeTableEntry */
 	Oid			reltablespace;	/* containing tablespace */
 	RTEKind		rtekind;		/* RELATION, SUBQUERY, or FUNCTION */
 	AttrNumber	min_attr;		/* smallest attrno of rel (often <0) */
 	AttrNumber	max_attr;		/* largest attrno of rel */
-	Relids	   *attr_needed;	/* array indexed [min_attr .. max_attr] */
+	Relids	   *attr_needed;	/* array indexed [min_attr .. max_attr], every element(Relids) contain all relation in clause which reference to this attribute. */
 	int32	   *attr_widths;	/* array indexed [min_attr .. max_attr] */
 	List	   *lateral_vars;	/* LATERAL Vars and PHVs referenced by rel */
 	Relids		lateral_referencers;	/* rels that reference me laterally */
-	List	   *indexlist;		/* list of IndexOptInfo */
+	List	   *indexlist;		/* list of IndexOptInfo. one base rel corresponds to multiple index, every index will have an IndexOptInfo. */
 	List	   *statlist;		/* list of StatisticExtInfo */
 	BlockNumber pages;			/* size estimates derived from pg_class */
 	double		tuples;
 	double		allvisfrac;
-	PlannerInfo *subroot;		/* if subquery */
+	PlannerInfo *subroot;		/* if subquery. if this base rel is subquery, then subplan generated from this subquery will use subroot. */
 	List	   *subplan_params; /* if subquery */
 	int			rel_parallel_workers;	/* wanted number of parallel workers */
 
@@ -587,8 +587,8 @@ typedef struct RelOptInfo
 	Index		baserestrict_min_security;	/* min security_level found in
 											 * baserestrictinfo */
 	List	   *joininfo;		/* RestrictInfo structures for join clauses
-								 * involving this rel */
-	bool		has_eclass_joins;	/* T means joininfo is incomplete */
+								 * involving this rel. */
+	bool		has_eclass_joins;	/* T means joininfo is incomplete. This RelOptInfo maybe exist equal join condition(can't append into joininfo list now, only can create these equal join conditions when generating join path) with other RelOptInfo in an equivalence class. */
 
 	/* used by "other" relations */
 	Relids		top_parent_relids;	/* Relids of topmost parents */
@@ -630,7 +630,7 @@ typedef struct IndexOptInfo
 
 	Oid			indexoid;		/* OID of the index relation */
 	Oid			reltablespace;	/* tablespace of index (not table) */
-	RelOptInfo *rel;			/* back-link to index's table */
+	RelOptInfo *rel;			/* back-link to index's table(table which contains this index) */
 
 	/* index-size statistics (from pg_class and elsewhere) */
 	BlockNumber pages;			/* number of disk pages in index */
@@ -639,19 +639,19 @@ typedef struct IndexOptInfo
 
 	/* index descriptor information */
 	int			ncolumns;		/* number of columns in index */
-	int		   *indexkeys;		/* column numbers of index's keys, or 0 */
-	Oid		   *indexcollations;	/* OIDs of collations of index columns */
-	Oid		   *opfamily;		/* OIDs of operator families for columns */
+	int		   *indexkeys;		/* column numbers of index's keys, or 0(for expression index). It is for simple index. Attribute number of this column in relation. It is an array with ncolumns elements. */
+	Oid		   *indexcollations;	/* OIDs of collations of index columns. Every column of index could have a collation. */
+	Oid		   *opfamily;		/* OIDs of operator families for columns. It is an array with ncolums elements */
 	Oid		   *opcintype;		/* OIDs of opclass declared input data types */
 	Oid		   *sortopfamily;	/* OIDs of btree opfamilies, if orderable */
 	bool	   *reverse_sort;	/* is sort order descending? */
 	bool	   *nulls_first;	/* do NULLs come first in the sort order? */
 	bool	   *canreturn;		/* which index cols can be returned in an
-								 * index-only scan? */
+								 * index-only scan(each index access method may have different limit to return index cols in index-only scan)? This is an array corresponding to indexkeys. */
 	Oid			relam;			/* OID of the access method (in pg_am) */
 
-	List	   *indexprs;		/* expressions for non-simple index columns */
-	List	   *indpred;		/* predicate if a partial index, else NIL */
+	List	   *indexprs;		/* expressions for non-simple index columns(expression index). Index is divided into simple index and expression index(like CREATE INDEX index_name ON table_name (expression(column_name))). Because it is a List, indexpr of indexcol is not the indexcol-th ListCell of indexprs, use example: indxpath.c:3217 line */
+	List	   *indpred;		/* predicate if a partial index(partial index contain predicate), else NIL */
 
 	List	   *indextlist;		/* targetlist representing index columns */
 
@@ -661,9 +661,9 @@ typedef struct IndexOptInfo
 									 * target rel, see comments in
 									 * check_index_predicates()) */
 
-	bool		predOK;			/* true if index predicate matches query */
+	bool		predOK;			/* true if index predicate matches query. If qual in query contain partial index's predicate, then we can use this partial index. */
 	bool		unique;			/* true if a unique index */
-	bool		immediate;		/* is uniqueness enforced immediately? */
+	bool		immediate;		/* is uniqueness enforced immediately? If index is unique index, then need check uniqueness when insert rows, if immediate==true, we need to check uniqueness before writing; if immediate == false, we could check uniqueness when Transaction end. */
 	bool		hypothetical;	/* true if index doesn't really exist */
 
 	/* Remaining fields are copied from the index AM's API struct: */
@@ -848,7 +848,7 @@ typedef struct PathKey
 {
 	NodeTag		type;
 
-	EquivalenceClass *pk_eclass;	/* the value that is ordered */
+	EquivalenceClass *pk_eclass;	/* the value that is ordered. Actually pk_class includes the targetvalue to order, all other values in pk_class will also be ordered because they belong to a EquivalenceClass. */
 	Oid			pk_opfamily;	/* btree opfamily defining the ordering */
 	int			pk_strategy;	/* sort direction (ASC or DESC) */
 	bool		pk_nulls_first; /* do NULLs come before normal values? */
@@ -939,7 +939,7 @@ typedef struct ParamPathInfo
  * and the specified outer rel(s).
  *
  * "rows" is the same as parent->rows in simple paths, but in parameterized
- * paths and UniquePaths it can be less than parent->rows, reflecting the
+ * paths and UniquePaths it can be less than parent->rows because parameterized paths not only use baserestrictinfo qual, but also use join clauses, reflecting the
  * fact that we've filtered by extra join conditions or removed duplicates.
  *
  * "pathkeys" is a List of PathKey nodes (see above), describing the sort
@@ -949,23 +949,23 @@ typedef struct Path
 {
 	NodeTag		type;
 
-	NodeTag		pathtype;		/* tag identifying scan/join method */
+	NodeTag		pathtype;		/* tag identifying scan/join method. T_IndexPath, T_NestPath ... */
 
 	RelOptInfo *parent;			/* the relation this path can build */
 	PathTarget *pathtarget;		/* list of Vars/Exprs, cost, width */
 
 	ParamPathInfo *param_info;	/* parameterization info, or NULL if none */
 
-	bool		parallel_aware; /* engage parallel-aware logic? */
+	bool		parallel_aware; /* engage parallel-aware logic? It is different from parallel_safe, parellel_aware means whether parallelization is desired or not, parallel_safe means is able to parallelize or not. */
 	bool		parallel_safe;	/* OK to use as part of parallel plan? */
-	int			parallel_workers;	/* desired # of workers; 0 = not parallel */
+	int			parallel_workers;	/* desired #(number) of workers; 0 = not parallel */
 
 	/* estimated size/costs for path (see costsize.c for more info) */
 	double		rows;			/* estimated number of result tuples */
 	Cost		startup_cost;	/* cost expended before fetching any tuples */
 	Cost		total_cost;		/* total cost (assuming all tuples fetched) */
 
-	List	   *pathkeys;		/* sort ordering of path's output */
+	List	   *pathkeys;		/* sort ordering of path's output. It can give hints to upper join to generate better plan */
 	/* pathkeys is a List of PathKey nodes; see above */
 } Path;
 
@@ -1021,7 +1021,7 @@ typedef struct Path
  *
  * 'indextotalcost' and 'indexselectivity' are saved in the IndexPath so that
  * we need not recompute them when considering using the same index in a
- * bitmap index/heap scan (see BitmapHeapPath).  The costs of the IndexPath
+ * bitmap index/heap scan (see BitmapHeapPath). That's right, in bitmapscan the indexpath will be scan, so if we store indexpathcost when scan indexpath in indexscan, then we can use the indexpathcost directly when we in bitmapscan. The costs of the IndexPath
  * itself represent the costs of an IndexScan or IndexOnlyScan plan type.
  *----------
  */
@@ -1606,7 +1606,7 @@ typedef struct LimitPath
  *
  * We create one of these for each AND sub-clause of a restriction condition
  * (WHERE or JOIN/ON clause).  Since the restriction clauses are logically
- * ANDed, we can use any one of them or any subset of them to filter out
+ * ANDed, we can use any one of them or any subset of them to filter out(not use these)
  * tuples, without having to evaluate the rest.  The RestrictInfo node itself
  * stores data used by the optimizer while choosing the best query plan.
  *
@@ -1780,7 +1780,7 @@ typedef struct RestrictInfo
 	/* This field is NULL unless clause is potentially redundant: */
 	EquivalenceClass *parent_ec;	/* generating EquivalenceClass */
 
-	/* cache space for cost and selectivity */
+	/* cache space for cost and selectivity. We will compute selectivity for a clause every time we generate a different path, so we can cache these info to avoid unnecessary computation. */
 	QualCost	eval_cost;		/* eval cost of clause; -1 if not yet set */
 	Selectivity norm_selec;		/* selectivity for "normal" (JOIN_INNER)
 								 * semantics; -1 if not yet set; >1 means a
@@ -1837,7 +1837,7 @@ typedef struct MergeScanSelCache
  * the contained expression or a Var referring to a lower-level evaluation of
  * the contained expression.  Typically the evaluation occurs below an outer
  * join, and Var references above the outer join might thereby yield NULL
- * instead of the expression value.
+ * instead of the expression value. The way to deal with PlaceHolderVar is almostly the same as Var, but PlaceHolderVar is only alive in planner.
  *
  * Although the planner treats this as an expression node type, it is not
  * recognized by the parser or executor, so we declare it here rather than
@@ -1847,10 +1847,10 @@ typedef struct MergeScanSelCache
 typedef struct PlaceHolderVar
 {
 	Expr		xpr;
-	Expr	   *phexpr;			/* the represented expression */
+	Expr	   *phexpr;			/* the represented expression(encapsulated expression or Var) */
 	Relids		phrels;			/* base relids syntactically within expr src */
 	Index		phid;			/* ID for PHV (unique within planner run) */
-	Index		phlevelsup;		/* > 0 if PHV belongs to outer query */
+	Index		phlevelsup;		/* > 0 if PHV belongs to outer query(as same as phlevelsup in Var) */
 } PlaceHolderVar;
 
 /*
@@ -2037,7 +2037,7 @@ typedef struct PartitionedChildRelInfo
  * each PlaceHolderVar.  Note that phid is unique throughout a planner run,
  * not just within a query level --- this is so that we need not reassign ID's
  * when pulling a subquery into its parent.
- *
+ * 
  * The idea is to evaluate the expression at (only) the ph_eval_at join level,
  * then allow it to bubble up like a Var until the ph_needed join level.
  * ph_needed has the same definition as attr_needed for a regular Var.
@@ -2055,7 +2055,7 @@ typedef struct PartitionedChildRelInfo
  * don't result in unnecessary constraints on join order.
  */
 
-typedef struct PlaceHolderInfo
+typedef struct PlaceHolderInfo /* specify which level the expression in PlaceHolderVar to be evaluated and which level to be used. */
 {
 	NodeTag		type;
 

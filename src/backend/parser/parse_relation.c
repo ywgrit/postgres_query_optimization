@@ -111,7 +111,7 @@ refnameRangeTblEntry(ParseState *pstate,
 			return NULL;
 	}
 
-	while (pstate != NULL)
+	while (pstate != NULL) /* parentParseState of pstate in top level is NULL */
 	{
 		RangeTblEntry *result;
 

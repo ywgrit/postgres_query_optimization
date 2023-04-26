@@ -1417,7 +1417,7 @@ convert_EXISTS_sublink_to_join(PlannerInfo *root, SubLink *sublink,
 	Assert(sublink->subLinkType == EXISTS_SUBLINK);
 
 	/*
-	 * Can't flatten if it contains WITH.  (We could arrange to pull up the
+	 * Can't flatten if it contains WITH(i.e, Common Table Expression).  (We could arrange to pull up the
 	 * WITH into the parent query's cteList, but that risks changing the
 	 * semantics, since a WITH ought to be executed once per associated query
 	 * call.)  Note that convert_ANY_sublink_to_join doesn't have to reject
@@ -1492,7 +1492,7 @@ convert_EXISTS_sublink_to_join(PlannerInfo *root, SubLink *sublink,
 	 * merger.
 	 */
 	rtoffset = list_length(parse->rtable);
-	OffsetVarNodes((Node *) subselect, rtoffset, 0);
+	OffsetVarNodes((Node *) subselect, rtoffset, 0); // subselect->rtable will be attach to parent->rtable, so var in subselect which belong to subselect->rtable should add it's varno by offset
 	OffsetVarNodes(whereClause, rtoffset, 0);
 
 	/*

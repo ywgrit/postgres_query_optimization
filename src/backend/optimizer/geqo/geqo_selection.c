@@ -48,7 +48,7 @@ static int	linear_rand(PlannerInfo *root, int max, double bias);
 /*
  * geqo_selection
  *	 according to bias described by input parameters,
- *	 first and second genes are selected from the pool
+ *	 first and second genes are selected from the pool. Chromosomes in pool have been sorted by Chromosome.worth
  */
 void
 geqo_selection(PlannerInfo *root, Chromosome *momma, Chromosome *daddy,

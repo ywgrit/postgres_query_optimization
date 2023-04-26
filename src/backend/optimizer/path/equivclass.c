@@ -780,7 +780,7 @@ generate_base_implied_equalities(PlannerInfo *root)
 		else
 			generate_base_implied_equalities_no_const(root, ec);
 
-		/* Recover if we failed to generate required derived clauses */
+		/* Recover if we failed to generate required derived clauses. TODO(wx):use ec_broken to fix things? can we have another graceful implmentation? */
 		if (ec->ec_broken)
 			generate_base_implied_equalities_broken(root, ec);
 	}
@@ -1561,7 +1561,7 @@ reconsider_outer_join_clauses(PlannerInfo *root)
 				rinfo->outer_selec = 1.0;
 				distribute_restrictinfo_to_rels(root, rinfo);
 			}
-			else
+			else /* can't propagate through any constant to lower join */
 				prev = cell;
 		}
 
@@ -1612,7 +1612,7 @@ reconsider_outer_join_clauses(PlannerInfo *root)
 		}
 	} while (found);
 
-	/* Now, any remaining clauses have to be thrown back */
+	/* Now, any remaining clauses(can't deduce derived clause, hence be remanined from do{} while statement) have to be thrown back */
 	foreach(cell, root->left_join_clauses)
 	{
 		RestrictInfo *rinfo = (RestrictInfo *) lfirst(cell);
@@ -2338,7 +2338,7 @@ have_relevant_eclass_joinclause(PlannerInfo *root,
 		 * up being an unqualified nestloop.
 		 */
 		if (bms_overlap(rel1->relids, ec->ec_relids) &&
-			bms_overlap(rel2->relids, ec->ec_relids))
+			bms_overlap(rel2->relids, ec->ec_relids)) /* The existence of member in rel1 and member of rel2 is equivalent, so there is an equivalent constraint between these two members, so there is joinclause between rel1 and rel2. */
 			return true;
 	}
 
@@ -2375,7 +2375,7 @@ has_relevant_eclass_joinclause(PlannerInfo *root, RelOptInfo *rel1)
 		 * to find an EC that mentions both this rel and some other rel.
 		 */
 		if (bms_overlap(rel1->relids, ec->ec_relids) &&
-			!bms_is_subset(ec->ec_relids, rel1->relids))
+			!bms_is_subset(ec->ec_relids, rel1->relids)/* ec should include other RelOptInfos */)
 			return true;
 	}
 

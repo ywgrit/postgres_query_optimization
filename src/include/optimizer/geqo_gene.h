@@ -31,15 +31,15 @@ typedef int Gene;
 
 typedef struct Chromosome
 {
-	Gene	   *string;
-	Cost		worth;
+	Gene	   *string; /* an int array which represent the join order of all rels */
+	Cost		worth; /* corresponding to fitness in genetic inheritance algorithm */
 } Chromosome;
 
 typedef struct Pool
 {
 	Chromosome *data;
 	int			size;
-	int			string_length;
+	int			string_length; /* the number of rels in each Chromosome */
 } Pool;
 
 #endif							/* GEQO_GENE_H */

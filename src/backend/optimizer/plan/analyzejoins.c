@@ -170,7 +170,7 @@ join_is_removable(PlannerInfo *root, SpecialJoinInfo *sjinfo)
 	 * going to be able to do anything with it.
 	 */
 	if (sjinfo->jointype != JOIN_LEFT ||
-		sjinfo->delay_upper_joins)
+		sjinfo->delay_upper_joins) /* there is no rightjoin because all rightjoin have been transformed to leftjoin before. */
 		return false;
 
 	if (!bms_get_singleton_member(sjinfo->min_righthand, &innerrelid))
@@ -200,7 +200,7 @@ join_is_removable(PlannerInfo *root, SpecialJoinInfo *sjinfo)
 	 * As a micro-optimization, it seems better to start with max_attr and
 	 * count down rather than starting with min_attr and counting up, on the
 	 * theory that the system attributes are somewhat less likely to be wanted
-	 * and should be tested last.
+	 * and should be tested last. The higher the probability that the variable will be needed, the earlier the variable will be tested, so have the higher probability to exit the test(filed to pass test).
 	 */
 	for (attroff = innerrel->max_attr - innerrel->min_attr;
 		 attroff >= 0;

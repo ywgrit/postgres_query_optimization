@@ -52,7 +52,7 @@
 
 /*
  * Clamp a computed probability estimate (which may suffer from roundoff or
- * estimation errors) to valid range.  Argument must be a float variable.
+ * estimation errors) to valid range.  Argument must be a float variable. The benefit of the form of this macro:https://stackoverflow.com/questions/257418/do-while-0-what-is-it-good-for
  */
 #define CLAMP_PROBABILITY(p) \
 	do { \
