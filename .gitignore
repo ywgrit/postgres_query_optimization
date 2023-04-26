@@ -41,5 +41,6 @@ lib*.pc
 /Release/
 /tmp_install/
 
-# excludes compile files
+# excludes compile files and other files
 .ccls-cache/
+.fuse_hidden*
